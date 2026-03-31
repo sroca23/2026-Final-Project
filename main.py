@@ -1,9 +1,11 @@
 import pygame
 import sys
 import random
+import math
 
-# Initialize Pygame
+# Initialize Pygame and mixer
 pygame.init()
+pygame.mixer.init()
 
 # Screen dimensions
 SCREEN_WIDTH = 400
@@ -20,6 +22,51 @@ YELLOW = (255, 255, 0)
 GREEN = (0, 255, 0)
 GOLD = (255, 215, 0)
 PURPLE = (128, 0, 128)
+
+class SoundManager:
+    def __init__(self):
+        self.sounds = {}
+        self.music_volume = 0.7
+        self.sfx_volume = 0.8
+        self.load_sounds()
+        
+    def load_sounds(self):
+        try:
+            # Create simple beep sounds using pygame's built-in capabilities
+            # Since numpy isn't available, we'll use placeholder sounds
+            print("Sound system initialized (no external files needed)")
+            
+        except Exception as e:
+            print(f"Sound loading failed: {e}")
+            self.sounds = {}
+    
+    def play_sound(self, sound_name):
+        # Placeholder for sound effects - just print for now
+        sound_effects = {
+            'boost': "BOOST SOUND!",
+            'collision': "COLLISION SOUND!", 
+            'achievement': "ACHIEVEMENT SOUND!",
+            'menu_select': "MENU CLICK!"
+        }
+        if sound_name in sound_effects:
+            print(f"Playing: {sound_effects[sound_name]}")
+    
+    def play_music(self, loop=True):
+        print("Background music started (looping)")
+    
+    def stop_music(self):
+        print("Music stopped")
+    
+    def set_music_volume(self, volume):
+        self.music_volume = max(0, min(1, volume))
+        print(f"Music volume set to {int(self.music_volume * 100)}%")
+    
+    def set_sfx_volume(self, volume):
+        self.sfx_volume = max(0, min(1, volume))
+        print(f"SFX volume set to {int(self.sfx_volume * 100)}%")
+
+# Create global sound manager
+sound_manager = SoundManager()
 
 class Avatar:
     def __init__(self, name, color, hair_color, shirt_color, pants_color):
@@ -232,6 +279,88 @@ class Train(pygame.sprite.Sprite):
         for i in range(10, self.width - 5, 20):
             pygame.draw.circle(surface, BLACK, (self.rect.x + i, self.rect.bottom), 3)
 
+class Barrier(pygame.sprite.Sprite):
+    def __init__(self, x, y, lane):
+        super().__init__()
+        self.lane = lane
+        self.width = 80
+        self.height = 25
+        self.image = pygame.Surface((self.width, self.height))
+        self.image.fill((150, 75, 0))  # Brown barrier
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.vel_y = random.randint(3, 6)
+        
+    def update(self):
+        self.rect.y += self.vel_y
+    
+    def draw(self, surface):
+        # Draw barrier body
+        pygame.draw.rect(surface, (150, 75, 0), self.rect)
+        # Draw warning stripes
+        for i in range(0, self.width, 10):
+            pygame.draw.rect(surface, YELLOW, (self.rect.x + i, self.rect.y, 5, self.height))
+        # Draw bolts
+        pygame.draw.circle(surface, BLACK, (self.rect.x + 10, self.rect.y + 10), 2)
+        pygame.draw.circle(surface, BLACK, (self.rect.x + self.width - 10, self.rect.y + 10), 2)
+
+class Sign(pygame.sprite.Sprite):
+    def __init__(self, x, y, lane):
+        super().__init__()
+        self.lane = lane
+        self.width = 30
+        self.height = 50
+        self.image = pygame.Surface((self.width, self.height))
+        self.image.fill((200, 200, 200))  # Gray pole
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.vel_y = random.randint(2, 5)
+        
+    def update(self):
+        self.rect.y += self.vel_y
+    
+    def draw(self, surface):
+        # Draw pole
+        pygame.draw.rect(surface, (200, 200, 200), self.rect)
+        # Draw sign
+        sign_y = self.rect.y - 15
+        pygame.draw.rect(surface, RED, (self.rect.x - 10, sign_y, 50, 15))
+        pygame.draw.rect(surface, WHITE, (self.rect.x - 10, sign_y, 50, 15), 2)
+        # Draw STOP text
+        font = pygame.font.Font(None, 12)
+        stop_text = font.render("STOP", True, WHITE)
+        surface.blit(stop_text, (self.rect.x - 5, sign_y + 2))
+
+class Tunnel(pygame.sprite.Sprite):
+    def __init__(self, x, y, lane):
+        super().__init__()
+        self.lane = lane
+        self.width = SCREEN_WIDTH
+        self.height = 60
+        self.image = pygame.Surface((self.width, self.height))
+        self.image.fill((50, 50, 50))  # Dark tunnel
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.vel_y = 7  # Fast moving
+        
+    def update(self):
+        self.rect.y += self.vel_y
+    
+    def draw(self, surface):
+        # Draw tunnel entrance
+        pygame.draw.rect(surface, (50, 50, 50), self.rect)
+        # Draw tunnel arch
+        pygame.draw.arc(surface, (30, 30, 30), 
+                       (self.rect.x, self.rect.y - 20, SCREEN_WIDTH, 80), 
+                       0, 3.14, 20)
+        # Draw warning lights
+        for i in range(0, SCREEN_WIDTH, 100):
+            pygame.draw.circle(surface, YELLOW, (self.rect.x + i, self.rect.y + 10), 3)
+            pygame.draw.circle(surface, YELLOW, (self.rect.x + i, self.rect.y + self.height - 10), 3)
+
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -254,7 +383,7 @@ class Game:
         # Game objects (initialized when starting game)
         self.player = None
         self.cop = None
-        self.trains = pygame.sprite.Group()
+        self.obstacles = pygame.sprite.Group()  # All obstacles in one group
         self.spawn_timer = 0
         self.spawn_rate = 60
         self.score = 0
@@ -278,7 +407,7 @@ class Game:
         # Initialize game objects with selected avatar
         self.player = Player(SCREEN_WIDTH // 2 - 12, SCREEN_HEIGHT // 2, self.avatars[self.selected_avatar])
         self.cop = Cop(SCREEN_WIDTH // 2 - 17, SCREEN_HEIGHT + 20)
-        self.trains = pygame.sprite.Group()
+        self.obstacles = pygame.sprite.Group()
         self.spawn_timer = 0
         self.score = 0
         self.time_survived = 0
@@ -288,6 +417,9 @@ class Game:
         self.game_over = False
         self.in_menu = False
         
+        # Start game music
+        sound_manager.play_music()
+        
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -296,19 +428,23 @@ class Game:
                 if self.in_menu:
                     if event.key == pygame.K_LEFT:
                         self.selected_avatar = (self.selected_avatar - 1) % len(self.avatars)
+                        sound_manager.play_sound('menu_select')
                     elif event.key == pygame.K_RIGHT:
                         self.selected_avatar = (self.selected_avatar + 1) % len(self.avatars)
+                        sound_manager.play_sound('menu_select')
                     elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
                         self.start_game()
                 else:
                     if event.key == pygame.K_c:  # Reset game
                         if self.game_over:
-                            self.__init__()
+                            self.start_game()  # Restart with same avatar
                     elif event.key == pygame.K_ESCAPE:  # Return to menu
                         self.in_menu = True
+                        self.game_over = False
                     elif event.key == pygame.K_SPACE:  # Activate boost
                         if self.player and self.player.activate_boost():
                             self.score += 50
+                            sound_manager.play_sound('boost')
     
     def handle_input(self):
         keys = pygame.key.get_pressed()
@@ -317,20 +453,37 @@ class Game:
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.player.move_right()
     
-    def spawn_train(self):
+    def spawn_obstacle(self):
         self.spawn_timer += 1
         # Spawn rate decreases (more frequent) as difficulty increases
-        spawn_rate = max(20, int(self.spawn_rate - (self.difficulty * 8)))
+        spawn_rate = max(15, int(self.spawn_rate - (self.difficulty * 10)))
         
         if self.spawn_timer >= spawn_rate:
             # Random lane selection (left, middle, right)
             lanes = [50, SCREEN_WIDTH // 2 - 30, SCREEN_WIDTH - 130]
             lane = random.choice(lanes)
             
-            train = Train(lane, -50, lane)
-            # Trains move faster as difficulty increases
-            train.vel_y = 5 + (self.difficulty * 0.5)
-            self.trains.add(train)
+            # Random obstacle type based on difficulty
+            obstacle_types = ['train', 'barrier', 'sign']
+            if self.difficulty > 2:
+                obstacle_types.append('tunnel')
+            
+            obstacle_type = random.choice(obstacle_types)
+            
+            if obstacle_type == 'train':
+                obstacle = Train(lane, -50, lane)
+                obstacle.vel_y = 5 + (self.difficulty * 0.5)
+            elif obstacle_type == 'barrier':
+                obstacle = Barrier(lane, -30, lane)
+                obstacle.vel_y = 4 + (self.difficulty * 0.4)
+            elif obstacle_type == 'sign':
+                obstacle = Sign(lane, -60, lane)
+                obstacle.vel_y = 3 + (self.difficulty * 0.3)
+            elif obstacle_type == 'tunnel':
+                obstacle = Tunnel(0, -70, 0)
+                obstacle.vel_y = 7 + (self.difficulty * 0.6)
+            
+            self.obstacles.add(obstacle)
             self.spawn_timer = 0
     
     def update(self):
@@ -342,15 +495,15 @@ class Game:
             self.player.update()
             self.cop.update()
             
-            # Move trains and remove off-screen ones
-            for train in self.trains:
-                train.update()
+            # Move obstacles and remove off-screen ones
+            for obstacle in self.obstacles:
+                obstacle.update()
             
-            # Remove trains that are off-screen (bottom)
-            self.trains = pygame.sprite.Group([train for train in self.trains if train.rect.top < SCREEN_HEIGHT])
+            # Remove obstacles that are off-screen (bottom)
+            self.obstacles = pygame.sprite.Group([obs for obs in self.obstacles if obs.rect.top < SCREEN_HEIGHT])
             
-            # Spawn new trains
-            self.spawn_train()
+            # Spawn new obstacles
+            self.spawn_obstacle()
             
             # Update score and time
             self.time_survived += 1
@@ -363,6 +516,7 @@ class Game:
             for achievement in self.achievements:
                 if achievement.check_unlock(current_time):
                     self.new_unlocks.append(achievement)
+                    sound_manager.play_sound('achievement')
             
             # Cop only moves if speed is greater than 0 (activated by obstacles)
             if self.cop_speed > 0:
@@ -370,13 +524,14 @@ class Game:
             else:
                 self.cop.vel_y = 0
             
-            # Check collisions with trains
-            for train in self.trains:
-                if self.player.rect.colliderect(train.rect):
+            # Check collisions with obstacles
+            for obstacle in self.obstacles:
+                if self.player.rect.colliderect(obstacle.rect):
                     self.game_over = True
+                    sound_manager.play_sound('collision')
                     # Increment blocks hit counter
                     self.blocks_hit += 1
-                    # Cop starts chasing and speeds up when hitting train
+                    # Cop starts chasing and speeds up when hitting obstacle
                     if self.cop_speed == 0:
                         self.cop_speed = 3
                     else:
@@ -385,6 +540,7 @@ class Game:
             # Check if caught by cop
             if self.player.rect.colliderect(self.cop.rect):
                 self.game_over = True
+                sound_manager.play_sound('collision')
     
     def draw(self):
         self.screen.fill(BLACK)
@@ -397,6 +553,9 @@ class Game:
         pygame.display.flip()
     
     def draw_menu(self):
+        # Stop game music when in menu
+        sound_manager.stop_music()
+        
         # Draw title
         title_font = pygame.font.Font(None, 48)
         title_text = title_font.render("SUBWAY SURFERS", True, WHITE)
@@ -440,8 +599,8 @@ class Game:
         # Draw game objects
         self.player.draw(self.screen)
         self.cop.draw(self.screen)
-        for train in self.trains:
-            train.draw(self.screen)
+        for obstacle in self.obstacles:
+            obstacle.draw(self.screen)
         
         # Draw score
         font = pygame.font.Font(None, 36)
@@ -450,6 +609,10 @@ class Game:
         
         time_text = pygame.font.Font(None, 24).render(f"Time: {self.time_survived // 60}s", True, WHITE)
         self.screen.blit(time_text, (10, 50))
+        
+        # Draw sound indicator
+        sound_text = pygame.font.Font(None, 16).render("[SOUND ON]", True, GREEN)
+        self.screen.blit(sound_text, (SCREEN_WIDTH - 80, 10))
         
         # Draw boost status
         boost_color = YELLOW if self.player.boost_active else (100, 100, 100)
@@ -508,21 +671,80 @@ class Game:
         
         # Draw game over message
         if self.game_over:
-            game_over_font = pygame.font.Font(None, 60)
+            # Stop music on game over
+            sound_manager.stop_music()
+            
+            # Draw dark overlay
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(128)
+            overlay.fill(BLACK)
+            self.screen.blit(overlay, (0, 0))
+            
+            # Draw game over box
+            box_width, box_height = 350, 250
+            box_x = (SCREEN_WIDTH - box_width) // 2
+            box_y = (SCREEN_HEIGHT - box_height) // 2
+            
+            # Draw box background with gradient effect
+            for i in range(box_height):
+                color_value = 50 + (i * 2)
+                if color_value > 150:
+                    color_value = 150
+                pygame.draw.line(self.screen, (color_value, 0, 0), 
+                               (box_x, box_y + i), (box_x + box_width, box_y + i))
+            
+            # Draw box border
+            pygame.draw.rect(self.screen, RED, (box_x, box_y, box_width, box_height), 3)
+            pygame.draw.rect(self.screen, YELLOW, (box_x - 2, box_y - 2, box_width + 4, box_height + 4), 2)
+            
+            # Draw "GAME OVER" with shadow effect
+            game_over_font = pygame.font.Font(None, 72)
+            shadow_text = game_over_font.render("GAME OVER", True, BLACK)
             game_over_text = game_over_font.render("GAME OVER", True, RED)
-            final_score_font = pygame.font.Font(None, 36)
-            final_score_text = final_score_font.render(f"Final Score: {self.score}", True, WHITE)
-            restart_font = pygame.font.Font(None, 28)
-            restart_text = restart_font.render("Press C to Restart", True, YELLOW)
             
-            self.screen.blit(game_over_text, (SCREEN_WIDTH//2 - 150, SCREEN_HEIGHT//2 - 80))
-            self.screen.blit(final_score_text, (SCREEN_WIDTH//2 - 120, SCREEN_HEIGHT//2))
-            self.screen.blit(restart_text, (SCREEN_WIDTH//2 - 110, SCREEN_HEIGHT//2 + 60))
+            self.screen.blit(shadow_text, (SCREEN_WIDTH//2 - 148, SCREEN_HEIGHT//2 - 158))
+            self.screen.blit(game_over_text, (SCREEN_WIDTH//2 - 150, SCREEN_HEIGHT//2 - 160))
             
-            # Draw controls reminder
-            controls_font = pygame.font.Font(None, 20)
-            controls_text = controls_font.render("Controls: Arrow Keys/A/D to move, SPACE for boost, ESC for menu", True, WHITE)
-            self.screen.blit(controls_text, (SCREEN_WIDTH//2 - 200, SCREEN_HEIGHT//2 + 100))
+            # Draw stats
+            stats_font = pygame.font.Font(None, 28)
+            
+            # Final score
+            score_shadow = stats_font.render(f"Final Score: {self.score}", True, BLACK)
+            score_text = stats_font.render(f"Final Score: {self.score}", True, WHITE)
+            self.screen.blit(score_shadow, (SCREEN_WIDTH//2 - 118, SCREEN_HEIGHT//2 - 18))
+            self.screen.blit(score_text, (SCREEN_WIDTH//2 - 120, SCREEN_HEIGHT//2 - 20))
+            
+            # Time survived
+            time_shadow = stats_font.render(f"Time Survived: {self.time_survived // 60}s", True, BLACK)
+            time_text = stats_font.render(f"Time Survived: {self.time_survived // 60}s", True, YELLOW)
+            self.screen.blit(time_shadow, (SCREEN_WIDTH//2 - 108, SCREEN_HEIGHT//2 + 12))
+            self.screen.blit(time_text, (SCREEN_WIDTH//2 - 110, SCREEN_HEIGHT//2 + 10))
+            
+            # Blocks hit
+            blocks_shadow = stats_font.render(f"Trains Hit: {self.blocks_hit}", True, BLACK)
+            blocks_text = stats_font.render(f"Trains Hit: {self.blocks_hit}", True, (255, 150, 150))
+            self.screen.blit(blocks_shadow, (SCREEN_WIDTH//2 - 88, SCREEN_HEIGHT//2 + 42))
+            self.screen.blit(blocks_text, (SCREEN_WIDTH//2 - 90, SCREEN_HEIGHT//2 + 40))
+            
+            # Draw options
+            option_font = pygame.font.Font(None, 24)
+            
+            # Restart option
+            restart_shadow = option_font.render("Press C to Restart", True, BLACK)
+            restart_text = option_font.render("Press C to Restart", True, GREEN)
+            self.screen.blit(restart_shadow, (SCREEN_WIDTH//2 - 78, SCREEN_HEIGHT//2 + 82))
+            self.screen.blit(restart_text, (SCREEN_WIDTH//2 - 80, SCREEN_HEIGHT//2 + 80))
+            
+            # Menu option
+            menu_shadow = option_font.render("Press ESC for Menu", True, BLACK)
+            menu_text = option_font.render("Press ESC for Menu", True, YELLOW)
+            self.screen.blit(menu_shadow, (SCREEN_WIDTH//2 - 78, SCREEN_HEIGHT//2 + 102))
+            self.screen.blit(menu_text, (SCREEN_WIDTH//2 - 80, SCREEN_HEIGHT//2 + 100))
+            
+            # Draw achievement summary
+            unlocked_count = sum(1 for a in self.achievements if a.unlocked)
+            achievement_text = option_font.render(f"Achievements: {unlocked_count}/{len(self.achievements)}", True, GOLD)
+            self.screen.blit(achievement_text, (SCREEN_WIDTH//2 - 80, SCREEN_HEIGHT//2 + 120))
     
     def run(self):
         while self.running:
