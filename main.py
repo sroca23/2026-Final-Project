@@ -3,9 +3,8 @@ import sys
 import random
 import math
 
-# Initialize Pygame and mixer
+# Initialize Pygame
 pygame.init()
-pygame.mixer.init()
 
 # Screen dimensions
 SCREEN_WIDTH = 400
@@ -23,50 +22,6 @@ GREEN = (0, 255, 0)
 GOLD = (255, 215, 0)
 PURPLE = (128, 0, 128)
 
-class SoundManager:
-    def __init__(self):
-        self.sounds = {}
-        self.music_volume = 0.7
-        self.sfx_volume = 0.8
-        self.load_sounds()
-        
-    def load_sounds(self):
-        try:
-            # Create simple beep sounds using pygame's built-in capabilities
-            # Since numpy isn't available, we'll use placeholder sounds
-            print("Sound system initialized (no external files needed)")
-            
-        except Exception as e:
-            print(f"Sound loading failed: {e}")
-            self.sounds = {}
-    
-    def play_sound(self, sound_name):
-        # Placeholder for sound effects - just print for now
-        sound_effects = {
-            'boost': "BOOST SOUND!",
-            'collision': "COLLISION SOUND!", 
-            'achievement': "ACHIEVEMENT SOUND!",
-            'menu_select': "MENU CLICK!"
-        }
-        if sound_name in sound_effects:
-            print(f"Playing: {sound_effects[sound_name]}")
-    
-    def play_music(self, loop=True):
-        print("Background music started (looping)")
-    
-    def stop_music(self):
-        print("Music stopped")
-    
-    def set_music_volume(self, volume):
-        self.music_volume = max(0, min(1, volume))
-        print(f"Music volume set to {int(self.music_volume * 100)}%")
-    
-    def set_sfx_volume(self, volume):
-        self.sfx_volume = max(0, min(1, volume))
-        print(f"SFX volume set to {int(self.sfx_volume * 100)}%")
-
-# Create global sound manager
-sound_manager = SoundManager()
 
 class Avatar:
     def __init__(self, name, color, hair_color, shirt_color, pants_color):
@@ -417,9 +372,7 @@ class Game:
         self.game_over = False
         self.in_menu = False
         
-        # Start game music
-        sound_manager.play_music()
-        
+                
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -428,10 +381,8 @@ class Game:
                 if self.in_menu:
                     if event.key == pygame.K_LEFT:
                         self.selected_avatar = (self.selected_avatar - 1) % len(self.avatars)
-                        sound_manager.play_sound('menu_select')
                     elif event.key == pygame.K_RIGHT:
                         self.selected_avatar = (self.selected_avatar + 1) % len(self.avatars)
-                        sound_manager.play_sound('menu_select')
                     elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
                         self.start_game()
                 else:
@@ -444,7 +395,6 @@ class Game:
                     elif event.key == pygame.K_SPACE:  # Activate boost
                         if self.player and self.player.activate_boost():
                             self.score += 50
-                            sound_manager.play_sound('boost')
     
     def handle_input(self):
         keys = pygame.key.get_pressed()
@@ -516,7 +466,6 @@ class Game:
             for achievement in self.achievements:
                 if achievement.check_unlock(current_time):
                     self.new_unlocks.append(achievement)
-                    sound_manager.play_sound('achievement')
             
             # Cop only moves if speed is greater than 0 (activated by obstacles)
             if self.cop_speed > 0:
@@ -528,7 +477,6 @@ class Game:
             for obstacle in self.obstacles:
                 if self.player.rect.colliderect(obstacle.rect):
                     self.game_over = True
-                    sound_manager.play_sound('collision')
                     # Increment blocks hit counter
                     self.blocks_hit += 1
                     # Cop starts chasing and speeds up when hitting obstacle
@@ -540,7 +488,6 @@ class Game:
             # Check if caught by cop
             if self.player.rect.colliderect(self.cop.rect):
                 self.game_over = True
-                sound_manager.play_sound('collision')
     
     def draw(self):
         self.screen.fill(BLACK)
@@ -553,9 +500,6 @@ class Game:
         pygame.display.flip()
     
     def draw_menu(self):
-        # Stop game music when in menu
-        sound_manager.stop_music()
-        
         # Draw title
         title_font = pygame.font.Font(None, 48)
         title_text = title_font.render("SUBWAY SURFERS", True, WHITE)
@@ -590,11 +534,14 @@ class Game:
             self.screen.blit(inst_text, inst_rect)
     
     def draw_game(self):
-        # Draw subway background (simple pattern)
-        for x in range(0, SCREEN_WIDTH, 40):
-            pygame.draw.line(self.screen, (50, 50, 50), (x, 0), (x, SCREEN_HEIGHT), 1)
-        for y in range(0, SCREEN_HEIGHT, 40):
-            pygame.draw.line(self.screen, (50, 50, 50), (0, y), (SCREEN_WIDTH, y), 1)
+        # Draw sky gradient background
+        for y in range(SCREEN_HEIGHT):
+            # Create gradient from light blue at top to darker blue at bottom
+            ratio = y / SCREEN_HEIGHT
+            r = int(135 * (1 - ratio) + 70 * ratio)
+            g = int(206 * (1 - ratio) + 130 * ratio)
+            b = int(235 * (1 - ratio) + 180 * ratio)
+            pygame.draw.line(self.screen, (r, g, b), (0, y), (SCREEN_WIDTH, y))
         
         # Draw game objects
         self.player.draw(self.screen)
@@ -610,10 +557,7 @@ class Game:
         time_text = pygame.font.Font(None, 24).render(f"Time: {self.time_survived // 60}s", True, WHITE)
         self.screen.blit(time_text, (10, 50))
         
-        # Draw sound indicator
-        sound_text = pygame.font.Font(None, 16).render("[SOUND ON]", True, GREEN)
-        self.screen.blit(sound_text, (SCREEN_WIDTH - 80, 10))
-        
+                
         # Draw boost status
         boost_color = YELLOW if self.player.boost_active else (100, 100, 100)
         boost_text = "BOOST ACTIVE!" if self.player.boost_active else f"Boost Ready: {max(0, self.player.boost_cooldown // 60)}s"
@@ -671,9 +615,6 @@ class Game:
         
         # Draw game over message
         if self.game_over:
-            # Stop music on game over
-            sound_manager.stop_music()
-            
             # Draw dark overlay
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
             overlay.set_alpha(128)
